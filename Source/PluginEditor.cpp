@@ -161,6 +161,11 @@ void InstaWidthEditor::timerCallback()
                               ? juce::String ("0 ms")
                               : juce::String (ms, 1) + " ms latency",
                           juce::dontSendNotification);
+
+    // Keep the correlation meter's per-band split aligned with the user's crossover settings
+    if (auto* fl = processor.apvts.getRawParameterValue ("fLow"))
+        if (auto* fh = processor.apvts.getRawParameterValue ("fHigh"))
+            corrMeter.setCrossovers (fl->load(), fh->load());
 }
 
 void InstaWidthEditor::paint (juce::Graphics& g)
@@ -244,9 +249,9 @@ void InstaWidthEditor::resized()
     firBox   .setBounds (mode.removeFromLeft (110).reduced (2, 6));
     latencyLabel.setBounds (mode.removeFromLeft (260).reduced (8, 6));
 
-    // ---- Correlation strip at the very bottom
-    auto bottom = area.removeFromBottom (juce::jlimit (40, 60, (int) (44.0f * scale)));
-    corrMeter.setBounds (bottom.reduced (14, 8));
+    // ---- Correlation strip at the very bottom (4 stacked sub-bars: Low/Mid/High/Overall)
+    auto bottom = area.removeFromBottom (juce::jlimit (78, 110, (int) (88.0f * scale)));
+    corrMeter.setBounds (bottom.reduced (14, 6));
 
     area.reduce (12, 12);
 
