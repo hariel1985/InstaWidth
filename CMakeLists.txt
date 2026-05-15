@@ -37,6 +37,7 @@ target_sources(InstaWidth
         Source/SideFIRBuilder.cpp
         Source/Goniometer.cpp
         Source/CorrelationMeter.cpp
+        Source/BandedCorrelation.cpp
 )
 
 target_compile_definitions(InstaWidth

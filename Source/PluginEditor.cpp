@@ -20,10 +20,12 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     setConstrainer (&constrainer);
     setSize (kDefaultW, kDefaultH);
 
-    processor.setMeterCallbacks (
-        [this] (float l, float r) { goniometer.pushSample (l, r); },
-        [this] (float l, float r) { corrMeter.pushSample (l, r); });
-    corrMeter.prepare (processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0);
+    processor.setGoniometerCallback (
+        [this] (float l, float r) { goniometer.pushSample (l, r); });
+
+    // Wire the correlation meter to the audio-thread analyser running in the processor.
+    corrMeter.setSource (&processor.getCorrelationAnalyser());
+    corrMeter.setSafetyProvider ([this] (int band) { return processor.getBandSafety (band); });
 
     // Header
     addAndMakeVisible (titleLabel);
@@ -64,6 +66,15 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     addAndMakeVisible (latencyLabel);
     latencyLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textSecondary);
     latencyLabel.setJustificationType (juce::Justification::centredLeft);
+
+    // Auto Mono Safety toggle in the mode strip
+    addAndMakeVisible (autoSafeLabel);
+    autoSafeLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textSecondary);
+    autoSafeLabel.setJustificationType (juce::Justification::centredRight);
+
+    addAndMakeVisible (autoSafeToggle);
+    autoSafeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
+        processor.apvts, "autoSafe", autoSafeToggle);
 
     // Section header labels (text + colour set here, font set in resized())
     for (auto* lbl : { &wLabel, &xLabel, &monoLabel, &tiltLabel, &deessLabel })
@@ -110,6 +121,20 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
 void InstaWidthEditor::installTooltips()
 {
     bypassToggle.setTooltip ("Bypass the whole plugin -- input passes through unprocessed.");
+
+    autoSafeToggle.setTooltip (
+        "Auto Mono Safety.\n"
+        "When on, the plugin watches the per-band L/R correlation and -- if a band\n"
+        "drops below its threshold -- automatically attenuates the effective width of\n"
+        "that band toward mono. The user knob positions stay put; the actual width is\n"
+        "the knob value multiplied by an automatic safety gain (0..1) per band.\n"
+        "\n"
+        "Attack ~30 ms, release ~400 ms. Active ducking is shown as a cyan tick on\n"
+        "the per-band correlation bars and as a '100%% -> 65%%' style readout under\n"
+        "each Width knob.\n"
+        "\n"
+        "Works in both Minimum Phase and Linear Phase modes (FIR rebuilds smoothly\n"
+        "in Linear Phase, so the response is slower there).");
 
     modeBox.setTooltip (
         "Processing mode.\n"
@@ -204,7 +229,9 @@ void InstaWidthEditor::installTooltips()
 InstaWidthEditor::~InstaWidthEditor()
 {
     stopTimer();
-    processor.setMeterCallbacks (nullptr, nullptr);
+    processor.setGoniometerCallback (nullptr);
+    corrMeter.setSource (nullptr);
+    corrMeter.setSafetyProvider (nullptr);
     setLookAndFeel (nullptr);
 }
 
@@ -238,9 +265,39 @@ void InstaWidthEditor::timerCallback()
             u.value.setText (p->getCurrentValueAsText(), juce::dontSendNotification);
     };
 
-    setText (kWLow,  "wLow");
-    setText (kWMid,  "wMid");
-    setText (kWHigh, "wHigh");
+    // Width labels: show the effective (auto-safety attenuated) value next to the user's
+    // setting when auto-safe is on and actively ducking.
+    auto setWidthText = [this] (KnobUnit& u, const juce::String& paramId, int band)
+    {
+        auto* p = processor.apvts.getParameter (paramId);
+        if (p == nullptr) return;
+        const juce::String base = p->getCurrentValueAsText();
+
+        const bool autoOn = processor.apvts.getRawParameterValue ("autoSafe") != nullptr
+                         && processor.apvts.getRawParameterValue ("autoSafe")->load() > 0.5f;
+        const float safety = processor.getBandSafety (band);
+
+        if (autoOn && safety < 0.995f)
+        {
+            const float userVal = p->getValue();  // normalised
+            // The displayed width is set% * safety; compose a "100% -> 65%" style string
+            const float userPct = userVal * 200.0f;   // range was 0..2 -> show as 0..200%
+            const float effPct  = userPct * safety;
+            u.value.setText (juce::String (juce::roundToInt (userPct)) + "% -> "
+                                + juce::String (juce::roundToInt (effPct)) + "%",
+                             juce::dontSendNotification);
+            u.value.setColour (juce::Label::textColourId, juce::Colour (0xff44ccff));
+        }
+        else
+        {
+            u.value.setText (base, juce::dontSendNotification);
+            u.value.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
+        }
+    };
+
+    setWidthText (kWLow,  "wLow",  0);
+    setWidthText (kWMid,  "wMid",  1);
+    setWidthText (kWHigh, "wHigh", 2);
     setText (kFLow,  "fLow");
     setText (kFHigh, "fHigh");
     setText (kTilt,  "tilt");
@@ -258,10 +315,9 @@ void InstaWidthEditor::timerCallback()
                               : juce::String (ms, 1) + " ms latency",
                           juce::dontSendNotification);
 
-    // Keep the correlation meter's per-band split aligned with the user's crossover settings
-    if (auto* fl = processor.apvts.getRawParameterValue ("fLow"))
-        if (auto* fh = processor.apvts.getRawParameterValue ("fHigh"))
-            corrMeter.setCrossovers (fl->load(), fh->load());
+    // Tell the meter whether auto-safety is on so it can render duck indicators.
+    if (auto* a = processor.apvts.getRawParameterValue ("autoSafe"))
+        corrMeter.setAutoSafetyEnabled (a->load() > 0.5f);
 }
 
 void InstaWidthEditor::paint (juce::Graphics& g)
@@ -316,6 +372,7 @@ void InstaWidthEditor::resized()
     modeLabel.setFont    (lookAndFeel.getMediumFont  (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
     firLabel.setFont     (lookAndFeel.getMediumFont  (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
     latencyLabel.setFont (lookAndFeel.getRegularFont (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
+    autoSafeLabel.setFont (lookAndFeel.getMediumFont (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
 
     for (auto* lbl : { &wLabel, &xLabel, &monoLabel, &tiltLabel, &deessLabel })
         lbl->setFont (lookAndFeel.getBoldFont (sectionTitleFontH));
@@ -343,7 +400,12 @@ void InstaWidthEditor::resized()
     mode.removeFromLeft (16);
     firLabel .setBounds (mode.removeFromLeft (32));
     firBox   .setBounds (mode.removeFromLeft (110).reduced (2, 6));
-    latencyLabel.setBounds (mode.removeFromLeft (260).reduced (8, 6));
+    latencyLabel.setBounds (mode.removeFromLeft (180).reduced (8, 6));
+
+    // Auto Mono Safe toggle on the right side of the mode strip
+    auto safeArea = mode.removeFromRight (180);
+    autoSafeToggle.setBounds (safeArea.removeFromRight (60).reduced (8, 6));
+    autoSafeLabel .setBounds (safeArea.reduced (4, 6));
 
     // ---- Correlation strip at the very bottom (4 stacked sub-bars: Low/Mid/High/Overall)
     auto bottom = area.removeFromBottom (juce::jlimit (78, 110, (int) (88.0f * scale)));

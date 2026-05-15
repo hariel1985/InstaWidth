@@ -3,6 +3,7 @@
 #include "WidthEngine.h"
 #include "SideDeEsser.h"
 #include "SideFIRBuilder.h"
+#include "BandedCorrelation.h"
 
 class InstaWidthEditor;
 
@@ -39,24 +40,36 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
-    // Goniometer + correlation taps — written by the audio thread, read by the editor.
-    // The editor connects them via small lock-free fifos held inside the meter components.
+    // Goniometer sample feed (audio thread -> editor). The correlation meter polls the
+    // analyser directly (no callback path needed for it).
     using SampleCallback = std::function<void (float l, float r)>;
-    void setMeterCallbacks (SampleCallback gonio, SampleCallback corr);
+    void setGoniometerCallback (SampleCallback gonio);
 
     int getCurrentLatency() const { return currentLatency; }
     ProcessingMode getMode() const { return (ProcessingMode) (int) *apvts.getRawParameterValue ("mode"); }
 
+    // Per-band correlation analyser (audio thread writes, GUI reads)
+    const BandedCorrelation& getCorrelationAnalyser() const { return analyser; }
+
+    // Auto Mono Safety state — current per-band safety multiplier in [0..1].
+    // 1.0 = user's width is applied as-is. <1 = effective width is attenuated to keep mono compatibility.
+    float getBandSafety (int band) const { return bandSafety[band].load(); }
+
 private:
     void updateParametersFromAPVTS();
     void applyLatency (int newLatency);
+    void updateAutoSafety (int blockSize);
 
     // DSP blocks
     WidthEngine      widthEngine;      // minimum-phase chain
     SideFIRBuilder   firBuilder;       // linear-phase FIR (background)
     juce::dsp::Convolution sideConvolution;
     SideDeEsser      deEsser;
+    BandedCorrelation analyser;
     bool sideFIRLoaded = false;
+
+    // Auto Mono Safety — sample-block-rate gain envelope per band
+    std::array<std::atomic<float>, 3> bandSafety { { {1.0f}, {1.0f}, {1.0f} } };
 
     juce::AudioBuffer<float> msBuffer;        // 2 channels: 0 = mid, 1 = side
     juce::AudioBuffer<float> midDelayBuffer;  // delay line to match FIR latency on the mid channel
@@ -84,10 +97,10 @@ private:
     std::atomic<float>* pDeessRange  = nullptr;
     std::atomic<float>* pFIRQuality  = nullptr;
     std::atomic<float>* pOutputDb    = nullptr;
+    std::atomic<float>* pAutoSafe    = nullptr;
 
-    // Meter callbacks (set by editor)
+    // Meter callback (set by editor)
     SampleCallback gonioCallback;
-    SampleCallback corrCallback;
     juce::SpinLock callbackLock;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InstaWidthProcessor)

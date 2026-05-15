@@ -81,6 +81,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout InstaWidthProcessor::createL
         juce::AudioParameterFloatAttributes().withStringFromValueFunction (
             [] (float v, int) { return juce::String (v, 1) + " dB"; })));
 
+    params.push_back (std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID { "autoSafe", 1 }, "Auto Mono Safe", false));
+
     return { params.begin(), params.end() };
 }
 
@@ -106,6 +109,7 @@ InstaWidthProcessor::InstaWidthProcessor()
     pDeessRange  = apvts.getRawParameterValue ("deessRange");
     pFIRQuality  = apvts.getRawParameterValue ("firQuality");
     pOutputDb    = apvts.getRawParameterValue ("output");
+    pAutoSafe    = apvts.getRawParameterValue ("autoSafe");
 }
 
 InstaWidthProcessor::~InstaWidthProcessor()
@@ -126,6 +130,9 @@ void InstaWidthProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
     widthEngine.prepare (sampleRate, samplesPerBlock);
     deEsser.prepare (sampleRate, samplesPerBlock);
+    analyser.prepare (sampleRate, samplesPerBlock);
+
+    for (auto& s : bandSafety) s.store (1.0f);
 
     juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock, 1 };
     sideConvolution.prepare (spec);
@@ -182,15 +189,23 @@ void InstaWidthProcessor::updateParametersFromAPVTS()
     const bool  monoOn = pMonoOn->load() > 0.5f;
     const float monoFreq = pMonoFreq->load();
 
+    // Effective widths = user widths * per-band safety multiplier (1.0 when auto-safe is off
+    // or correlation is fine).
+    const float effWl = wl * bandSafety[0].load();
+    const float effWm = wm * bandSafety[1].load();
+    const float effWh = wh * bandSafety[2].load();
+
     widthEngine.setCrossovers (fl, fh);
-    widthEngine.setWidths (wl, wm, wh);
+    widthEngine.setWidths (effWl, effWm, effWh);
     widthEngine.setSideTilt (tilt);
     widthEngine.setMonomaker (monoOn, monoFreq);
 
     firBuilder.setCrossovers (fl, fh);
-    firBuilder.setWidths (wl, wm, wh);
+    firBuilder.setWidths (effWl, effWm, effWh);
     firBuilder.setSideTilt (tilt);
     firBuilder.setMonomaker (monoOn, monoFreq);
+
+    analyser.setCrossovers (fl, fh);
 
     const int qualityIdx = (int) pFIRQuality->load();
     firBuilder.setFFTOrder (9 + qualityIdx);   // 9=512 .. 14=16384
@@ -201,11 +216,55 @@ void InstaWidthProcessor::updateParametersFromAPVTS()
     deEsser.setRangeDb    (pDeessRange->load());
 }
 
-void InstaWidthProcessor::setMeterCallbacks (SampleCallback gonio, SampleCallback corr)
+void InstaWidthProcessor::updateAutoSafety (int blockSize)
+{
+    const bool enabled = pAutoSafe != nullptr && pAutoSafe->load() > 0.5f;
+
+    if (! enabled)
+    {
+        // Smoothly return safety multipliers to 1.0 (no attenuation) when auto-safe is off,
+        // so disabling the feature does not suddenly jump the effective width.
+        for (auto& s : bandSafety)
+        {
+            float v = s.load();
+            if (v < 0.9999f)
+                s.store (v + (1.0f - v) * 0.10f);
+            else
+                s.store (1.0f);
+        }
+        return;
+    }
+
+    // Same per-band thresholds the meter uses for the warning -- the safety system kicks in
+    // exactly when the warning would.
+    constexpr float kThreshold[3] = { -0.05f, -0.30f, -0.45f };
+    // How far below the threshold counts as "fully duck to mono". A correlation that drops
+    // an additional 0.30 below the threshold pulls safety down to 0 (full mono).
+    constexpr float kDuckRange = 0.30f;
+
+    // Per-block attack/release coefficients
+    const double blockSec = (double) blockSize / std::max (1.0, currentSampleRate);
+    const float attackCoef  = (float) std::exp (-blockSec / 0.030);  // ~30 ms attack
+    const float releaseCoef = (float) std::exp (-blockSec / 0.400);  // ~400 ms release
+
+    for (int b = 0; b < 3; ++b)
+    {
+        const float corr = analyser.getBandCorrelation (b);
+        // overshoot is positive when we're below threshold
+        const float overshoot = std::max (0.0f, kThreshold[b] - corr);
+        const float target = std::max (0.0f, 1.0f - overshoot / kDuckRange);
+
+        float current = bandSafety[b].load();
+        const float coef = (target < current) ? attackCoef : releaseCoef;
+        current = coef * current + (1.0f - coef) * target;
+        bandSafety[b].store (current);
+    }
+}
+
+void InstaWidthProcessor::setGoniometerCallback (SampleCallback gonio)
 {
     const juce::SpinLock::ScopedLockType lock (callbackLock);
     gonioCallback = std::move (gonio);
-    corrCallback  = std::move (corr);
 }
 
 void InstaWidthProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
@@ -237,18 +296,16 @@ void InstaWidthProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     if (bypassed || numChans < 2)
     {
-        // Even in bypass, feed meters with input so the user sees pre/post comparison
-        // (here we just feed the bypassed signal so meters reflect what leaves the plugin)
+        const float* l = buffer.getReadPointer (0);
+        const float* r = buffer.getReadPointer (juce::jmin (1, numChans - 1));
+        analyser.processBlock (l, r, numSamples);
+        updateAutoSafety (numSamples);
+
         const juce::SpinLock::ScopedTryLockType lk (callbackLock);
-        if (lk.isLocked() && (gonioCallback || corrCallback))
+        if (lk.isLocked() && gonioCallback)
         {
-            const float* l = buffer.getReadPointer (0);
-            const float* r = buffer.getReadPointer (juce::jmin (1, numChans - 1));
             for (int i = 0; i < numSamples; ++i)
-            {
-                if (gonioCallback) gonioCallback (l[i], r[i]);
-                if (corrCallback)  corrCallback  (l[i], r[i]);
-            }
+                gonioCallback (l[i], r[i]);
         }
         return;
     }
@@ -311,16 +368,18 @@ void InstaWidthProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     for (int ch = 2; ch < numChans; ++ch)
         buffer.clear (ch, 0, numSamples);
 
-    // Feed meters with the processed output
+    // Run the per-band correlation analyser on the processed output, then the auto-safety
+    // controller. These run regardless of whether the editor is open.
+    analyser.processBlock (outL, outR, numSamples);
+    updateAutoSafety (numSamples);
+
+    // Feed the goniometer (the correlation meter polls the analyser directly).
     {
         const juce::SpinLock::ScopedTryLockType lk (callbackLock);
-        if (lk.isLocked() && (gonioCallback || corrCallback))
+        if (lk.isLocked() && gonioCallback)
         {
             for (int i = 0; i < numSamples; ++i)
-            {
-                if (gonioCallback) gonioCallback (outL[i], outR[i]);
-                if (corrCallback)  corrCallback  (outL[i], outR[i]);
-            }
+                gonioCallback (outL[i], outR[i]);
         }
     }
 }

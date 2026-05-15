@@ -50,6 +50,11 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> firAttachment;
     juce::Label  latencyLabel { {}, "0 ms" };
 
+    // Auto Mono Safety toggle in the mode strip
+    juce::Label autoSafeLabel { {}, "AUTO MONO" };
+    juce::ToggleButton autoSafeToggle;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoSafeAttachment;
+
     // Width knobs
     KnobUnit kWLow, kWMid, kWHigh;
     juce::Label wLabel { {}, "STEREO WIDTH" };

@@ -1,10 +1,10 @@
 #pragma once
 #include <JuceHeader.h>
+#include "BandedCorrelation.h"
 
-// Pearson correlation between L and R, computed both overall and per-band.
-//   Bands match the main DSP crossovers (Low/Mid/High at fLow and fHigh).
-//   The display shows a stacked set of bars so the user can see WHICH frequency
-//   region is going mono-incompatible — and the warning text names the band(s).
+// Display-only widget that polls a BandedCorrelation analyser running in the audio thread.
+// Renders 3 per-band correlation bars plus an overall one, with a sustained-hold warning
+// that names the offending band(s).
 class CorrelationMeter : public juce::Component,
                          public juce::SettableTooltipClient,
                          private juce::Timer
@@ -13,49 +13,27 @@ public:
     CorrelationMeter();
     ~CorrelationMeter() override;
 
-    void prepare (double sampleRate);
+    // The analyser must outlive the meter -- it lives in the audio processor.
+    void setSource (const BandedCorrelation* src) { source = src; }
 
-    // Audio thread — call once per output sample.
-    void pushSample (float l, float r);
-
-    // GUI thread — tell the meter what frequencies to split on.
-    void setCrossovers (float fLow, float fHigh);
+    // Provide getters for the auto-safety multipliers so the warning can mention when
+    // the safety system is actively pulling a band down.
+    void setSafetyProvider (std::function<float (int)> p) { safetyProvider = std::move (p); }
+    void setAutoSafetyEnabled (bool e) { autoSafetyOn = e; }
 
     void paint (juce::Graphics& g) override;
 
-    float getCorrelation() const  { return displayCorrelation; }
-    bool  isNegative()    const   { return displayCorrelation < 0.0f; }
-
 private:
     void timerCallback() override;
-    void updateCoefficientsIfNeeded();   // audio thread
 
-    double sr = 44100.0;
-    float alpha = 0.0f;
+    const BandedCorrelation* source = nullptr;
+    std::function<float (int)> safetyProvider;
+    bool autoSafetyOn = false;
 
-    // Pending crossover state (set from GUI, applied in audio thread)
-    std::atomic<float> pendingFLow   { 150.0f };
-    std::atomic<float> pendingFHigh  { 2000.0f };
-    std::atomic<bool>  coeffsDirty   { true };
-
-    // Per-channel split filters: LP_fLow + HP_fLow + LP_fHigh + HP_fHigh (Butterworth 2nd order)
-    juce::dsp::IIR::Filter<float> lpFLowL, hpFLowL, lpFHighL, hpFHighL;
-    juce::dsp::IIR::Filter<float> lpFLowR, hpFLowR, lpFHighR, hpFHighR;
-
-    // Running smoothed products
-    struct Accum
-    {
-        std::atomic<float> sLR { 0.0f };
-        std::atomic<float> sLL { 0.0f };
-        std::atomic<float> sRR { 0.0f };
-    };
-    Accum overall;
-    Accum perBand[3];  // 0=Low, 1=Mid, 2=High
-
-    // Display state (GUI thread)
+    // Smoothed display state
     float displayCorrelation = 1.0f;
     std::array<float, 3> bandCorr { 1.0f, 1.0f, 1.0f };
-    std::array<int, 3>   negativeHold { 0, 0, 0 };   // ticks below threshold (hysteresis)
+    std::array<int, 3>   negativeHold  { 0, 0, 0 };
     std::array<bool, 3>  bandTriggered { false, false, false };
     float warnFlash = 0.0f;
 };
