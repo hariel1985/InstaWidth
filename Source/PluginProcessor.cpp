@@ -189,19 +189,30 @@ void InstaWidthProcessor::updateParametersFromAPVTS()
     const bool  monoOn = pMonoOn->load() > 0.5f;
     const float monoFreq = pMonoFreq->load();
 
-    // Effective widths = user widths * per-band safety multiplier (1.0 when auto-safe is off
-    // or correlation is fine).
-    const float effWl = wl * bandSafety[0].load();
-    const float effWm = wm * bandSafety[1].load();
-    const float effWh = wh * bandSafety[2].load();
+    // Effective widths = user widths * per-band safety multiplier.
+    const float s0 = bandSafety[0].load();
+    const float s1 = bandSafety[1].load();
+    const float s2 = bandSafety[2].load();
 
+    // Min Phase chain: smooth (block-rate) modulation is fine and free.
     widthEngine.setCrossovers (fl, fh);
-    widthEngine.setWidths (effWl, effWm, effWh);
+    widthEngine.setWidths (wl * s0, wm * s1, wh * s2);
     widthEngine.setSideTilt (tilt);
     widthEngine.setMonomaker (monoOn, monoFreq);
 
+    // Linear-phase chain: a smoothly-varying safety would produce a slightly different
+    // effective-width value every audio block, which forces the FIR builder to rebuild
+    // continuously. For large IRs (8192/16384 taps) the JUCE convolution cannot finish
+    // preparing one IR before the next one arrives, and outputs silence ("full mono").
+    // Quantising the safety to 5% steps lets the value sit still between transitions
+    // so the convolution actually finishes its preparation.
+    auto quantise = [] (float v) { return std::round (v * 20.0f) * 0.05f; };
+    const float qs0 = quantise (s0);
+    const float qs1 = quantise (s1);
+    const float qs2 = quantise (s2);
+
     firBuilder.setCrossovers (fl, fh);
-    firBuilder.setWidths (effWl, effWm, effWh);
+    firBuilder.setWidths (wl * qs0, wm * qs1, wh * qs2);
     firBuilder.setSideTilt (tilt);
     firBuilder.setMonomaker (monoOn, monoFreq);
 
