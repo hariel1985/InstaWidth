@@ -1,17 +1,23 @@
 #include "PluginEditor.h"
 
+namespace
+{
+    constexpr int kMinW = 1060;
+    constexpr int kMinH = 640;
+    constexpr int kMaxW = 1700;
+    constexpr int kMaxH = 1000;
+}
+
 InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     : juce::AudioProcessorEditor (&p), processor (p)
 {
     setLookAndFeel (&lookAndFeel);
 
-    constrainer.setSizeLimits (820, 520, 1600, 1000);
+    constrainer.setSizeLimits (kMinW, kMinH, kMaxW, kMaxH);
     setResizable (true, true);
     setConstrainer (&constrainer);
-    setSize (980, 600);
+    setSize (kMinW, kMinH);
 
-    // Audio thread → component sample fifos (callbacks captured by ref are safe
-    // because the processor outlives the editor; the editor clears them on destruction)
     processor.setMeterCallbacks (
         [this] (float l, float r) { goniometer.pushSample (l, r); },
         [this] (float l, float r) { corrMeter.pushSample (l, r); });
@@ -24,11 +30,12 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
 
     versionLabel.setFont (lookAndFeel.getRegularFont (12.0f));
     versionLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textSecondary);
+    versionLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (versionLabel);
 
     bypassLabel.setFont (lookAndFeel.getMediumFont (11.0f));
     bypassLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textSecondary);
-    bypassLabel.setJustificationType (juce::Justification::centred);
+    bypassLabel.setJustificationType (juce::Justification::centredRight);
     addAndMakeVisible (bypassLabel);
     addAndMakeVisible (bypassToggle);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
@@ -61,54 +68,41 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     latencyLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (latencyLabel);
 
-    // Width knobs (orange = primary)
+    auto styleHeaderLabel = [this] (juce::Label& lbl)
+    {
+        lbl.setFont (lookAndFeel.getBoldFont (12.0f));
+        lbl.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
+        lbl.setJustificationType (juce::Justification::centred);
+        addAndMakeVisible (lbl);
+    };
+
+    // Section headers
+    styleHeaderLabel (wLabel);      wLabel.setText ("STEREO WIDTH", juce::dontSendNotification);
+    styleHeaderLabel (xLabel);      xLabel.setText ("CROSSOVER",    juce::dontSendNotification);
+    styleHeaderLabel (monoLabel);   monoLabel.setText ("MONOMAKER",  juce::dontSendNotification);
+    styleHeaderLabel (tiltLabel);   tiltLabel.setText ("SIDE TILT",  juce::dontSendNotification);
+    styleHeaderLabel (deessLabel);  deessLabel.setText ("SIDE DE-ESSER", juce::dontSendNotification);
+
+    // Knobs
     configureKnob (kWLow,  "LOW",  "wLow");
     configureKnob (kWMid,  "MID",  "wMid");
     configureKnob (kWHigh, "HIGH", "wHigh");
-    wLabel.setFont (lookAndFeel.getBoldFont (12.0f));
-    wLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
-    wLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (wLabel);
-
-    // Crossover knobs (blue = secondary)
-    configureKnob (kFLow,  "L–M",  "fLow",  true);
-    configureKnob (kFHigh, "M–H",  "fHigh", true);
-    xLabel.setFont (lookAndFeel.getBoldFont (12.0f));
-    xLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
-    xLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (xLabel);
-
-    // Side processing
-    configureKnob (kTilt,     "TILT", "tilt");
-    configureKnob (kMonoFreq, "FREQ", "monoFreq", true);
-    monoLabel.setFont (lookAndFeel.getBoldFont (12.0f));
-    monoLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
-    monoLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (monoLabel);
-    sideLabel.setFont (lookAndFeel.getBoldFont (12.0f));
-    sideLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
-    sideLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (sideLabel);
+    configureKnob (kFLow,  "L→M", "fLow",  true);  // L→M arrow
+    configureKnob (kFHigh, "M→H", "fHigh", true);  // M→H arrow
+    configureKnob (kTilt,     "TILT",   "tilt");
+    configureKnob (kMonoFreq, "FREQ",   "monoFreq", true);
+    configureKnob (kDeessFreq,   "FREQ",   "deessFreq", true);
+    configureKnob (kDeessThresh, "THRESH", "deessThresh", true);
+    configureKnob (kDeessRange,  "RANGE",  "deessRange", true);
+    configureKnob (kOutput, "OUTPUT", "output");
 
     addAndMakeVisible (monoToggle);
     monoAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processor.apvts, "monoOn", monoToggle);
 
-    // De-esser
-    deessLabel.setFont (lookAndFeel.getBoldFont (12.0f));
-    deessLabel.setColour (juce::Label::textColourId, InstaWidthLookAndFeel::textPrimary);
-    deessLabel.setJustificationType (juce::Justification::centred);
-    addAndMakeVisible (deessLabel);
     addAndMakeVisible (deessToggle);
     deessAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processor.apvts, "deessOn", deessToggle);
-
-    configureKnob (kDeessFreq,   "FREQ",   "deessFreq", true);
-    configureKnob (kDeessThresh, "THRESH", "deessThresh", true);
-    configureKnob (kDeessRange,  "RANGE",  "deessRange", true);
-
-    // Output
-    configureKnob (kOutput, "OUTPUT", "output");
 
     addAndMakeVisible (goniometer);
     addAndMakeVisible (corrMeter);
@@ -149,7 +143,6 @@ void InstaWidthEditor::configureKnob (KnobUnit& u, const juce::String& caption,
 
 void InstaWidthEditor::timerCallback()
 {
-    // Update value labels by reading APVTS text representation
     auto setText = [this] (KnobUnit& u, const juce::String& paramId)
     {
         if (auto* p = processor.apvts.getParameter (paramId))
@@ -171,10 +164,10 @@ void InstaWidthEditor::timerCallback()
     const int latencySamples = processor.getCurrentLatency();
     const double sr = processor.getSampleRate();
     const double ms = (sr > 0.0) ? 1000.0 * latencySamples / sr : 0.0;
-    if (latencySamples <= 0)
-        latencyLabel.setText ("0 ms", juce::dontSendNotification);
-    else
-        latencyLabel.setText (juce::String (ms, 1) + " ms latency", juce::dontSendNotification);
+    latencyLabel.setText (latencySamples <= 0
+                              ? juce::String ("0 ms")
+                              : juce::String (ms, 1) + " ms latency",
+                          juce::dontSendNotification);
 }
 
 void InstaWidthEditor::paint (juce::Graphics& g)
@@ -182,126 +175,162 @@ void InstaWidthEditor::paint (juce::Graphics& g)
     g.fillAll (InstaWidthLookAndFeel::bgDark);
     lookAndFeel.drawBackgroundTexture (g, getLocalBounds());
 
-    // Header divider
-    auto headerBottom = 56;
+    // Header & mode strip dividers
     g.setColour (InstaWidthLookAndFeel::bgLight.withAlpha (0.5f));
-    g.drawHorizontalLine (headerBottom, 0.0f, (float) getWidth());
+    g.drawHorizontalLine (56, 0.0f, (float) getWidth());
+    g.drawHorizontalLine (92, 0.0f, (float) getWidth());
 
-    // Mode strip divider
-    auto modeBottom = headerBottom + 36;
-    g.drawHorizontalLine (modeBottom, 0.0f, (float) getWidth());
-
-    // Group backgrounds for the control panel on the right
-    g.setColour (InstaWidthLookAndFeel::bgMedium.withAlpha (0.45f));
-    for (auto* lbl : { &wLabel, &xLabel, &monoLabel, &sideLabel, &deessLabel })
+    // Section background panels — drawn behind their controls so each block reads as a unit
+    auto drawSection = [&] (juce::Rectangle<int> r, juce::String title)
     {
-        auto r = lbl->getBounds().expanded (4, 2);
-        r.setHeight (16);
-        g.fillRoundedRectangle (r.toFloat(), 3.0f);
-    }
+        if (r.isEmpty()) return;
+        auto fr = r.toFloat();
+        g.setColour (InstaWidthLookAndFeel::bgMedium.withAlpha (0.55f));
+        g.fillRoundedRectangle (fr, 6.0f);
+        g.setColour (InstaWidthLookAndFeel::bgLight.withAlpha (0.7f));
+        g.drawRoundedRectangle (fr, 6.0f, 1.0f);
+
+        g.setColour (InstaWidthLookAndFeel::accent.withAlpha (0.85f));
+        g.setFont (lookAndFeel.getBoldFont (10.5f));
+        g.drawText (title, r.removeFromTop (18).reduced (10, 2),
+                    juce::Justification::centredLeft);
+    };
+
+    drawSection (rWidth,  "STEREO WIDTH");
+    drawSection (rXover,  "CROSSOVER");
+    drawSection (rMono,   "MONOMAKER");
+    drawSection (rTilt,   "SIDE TILT");
+    drawSection (rDeess,  "SIDE DE-ESSER");
+    drawSection (rOutput, "OUTPUT");
 }
 
 void InstaWidthEditor::resized()
 {
     auto area = getLocalBounds();
 
-    // Header
+    // ---- Header (56 px)
     auto header = area.removeFromTop (56);
     titleLabel.setBounds (header.removeFromLeft (220).withTrimmedLeft (16));
-    auto headerRight = header.removeFromRight (200);
-    bypassLabel.setBounds (headerRight.removeFromTop (24).withTrimmedRight (60));
-    bypassToggle.setBounds (headerRight.removeFromTop (24).withTrimmedLeft (130).withTrimmedRight (10));
-    versionLabel.setBounds (header.removeFromRight (60));
+    auto headerRight = header.removeFromRight (220);
+    bypassToggle.setBounds (headerRight.removeFromRight (60).reduced (8, 16));
+    bypassLabel .setBounds (headerRight.removeFromRight (70).reduced (4, 18));
+    versionLabel.setBounds (headerRight.reduced (8, 18));
 
-    // Mode strip
+    // ---- Mode strip (36 px)
     auto mode = area.removeFromTop (36);
-    mode.removeFromLeft (12);
-    modeLabel.setBounds  (mode.removeFromLeft (50));
-    modeBox.setBounds    (mode.removeFromLeft (140).reduced (2, 6));
-    mode.removeFromLeft (12);
-    firLabel.setBounds   (mode.removeFromLeft (32));
-    firBox.setBounds     (mode.removeFromLeft (90).reduced (2, 6));
-    latencyLabel.setBounds (mode.removeFromLeft (160).reduced (4, 6));
+    mode.removeFromLeft (16);
+    modeLabel.setBounds (mode.removeFromLeft (50));
+    modeBox  .setBounds (mode.removeFromLeft (150).reduced (2, 6));
+    mode.removeFromLeft (16);
+    firLabel .setBounds (mode.removeFromLeft (32));
+    firBox   .setBounds (mode.removeFromLeft (110).reduced (2, 6));
+    latencyLabel.setBounds (mode.removeFromLeft (200).reduced (8, 6));
 
-    // Bottom correlation meter
-    auto bottom = area.removeFromBottom (40);
-    corrMeter.setBounds (bottom.reduced (12, 6));
+    // ---- Bottom correlation strip (44 px)
+    auto bottom = area.removeFromBottom (44);
+    corrMeter.setBounds (bottom.reduced (14, 8));
 
-    area.reduce (12, 12);
+    area.reduce (14, 14);
 
-    // Left: goniometer
-    auto leftSize = std::min (area.getHeight(), area.getWidth() / 2);
-    auto leftCol = area.removeFromLeft (leftSize);
+    // ---- Left column: goniometer (square, takes ~45% of width)
+    const int leftW = juce::jlimit (320, 480, area.getWidth() * 45 / 100);
+    auto leftCol = area.removeFromLeft (leftW);
     {
-        // Square it
         int dim = std::min (leftCol.getWidth(), leftCol.getHeight());
-        auto sq = leftCol.withSizeKeepingCentre (dim, dim);
-        goniometer.setBounds (sq);
+        goniometer.setBounds (leftCol.withSizeKeepingCentre (dim, dim));
     }
-    area.removeFromLeft (12);
+    area.removeFromLeft (14);
 
-    // Right column: control layout
-    // Five horizontal rows: Width(3 knobs) / Xover(2 knobs) / Side(Tilt + Mono on + freq) / Deess(toggle + 3 knobs) / Output
-    const int rowGap = 8;
+    // ---- Right column: stacked sections.
+    //  Row 1: Stereo Width (3 knobs)
+    //  Row 2: Crossover (2 knobs) + Side Tilt (1 knob)  — side-by-side
+    //  Row 3: Monomaker (toggle + 1 knob)
+    //  Row 4: Side De-esser (toggle + 3 knobs)
+    //  Row 5: Output (1 big knob)
+
+    auto right = area;
+    const int gap = 10;
+    const int rows = 5;
+    int rowH = (right.getHeight() - gap * (rows - 1)) / rows;
+
+    const int titleH = 22;          // header bar inside section
     const int captionH = 14;
-    const int valueH   = 12;
+    const int valueH = 14;
 
-    auto rightCol = area;
-    int totalRows = 5;
-    int totalGap  = rowGap * (totalRows - 1);
-    int rowH = (rightCol.getHeight() - totalGap) / totalRows;
-
-    auto layoutKnob = [captionH, valueH] (KnobUnit& u, juce::Rectangle<int> cell)
+    auto layoutKnob = [&] (KnobUnit& u, juce::Rectangle<int> cell)
     {
         u.caption.setBounds (cell.removeFromTop (captionH));
         u.value  .setBounds (cell.removeFromBottom (valueH));
-        u.knob   .setBounds (cell);
+        u.knob   .setBounds (cell.reduced (4));
     };
 
-    auto layoutRow = [&] (juce::Rectangle<int> row, juce::Label& titleLbl,
-                          std::initializer_list<KnobUnit*> knobs,
-                          juce::ToggleButton* toggle = nullptr)
+    // Row 1 — Stereo Width
     {
-        titleLbl.setBounds (row.removeFromTop (16));
-        int n = (int) knobs.size() + (toggle ? 1 : 0);
-        int cellW = row.getWidth() / n;
-        if (toggle)
-        {
-            toggle->setBounds (row.removeFromLeft (cellW).reduced (8, row.getHeight() / 4));
-        }
-        for (auto* k : knobs)
-        {
-            layoutKnob (*k, row.removeFromLeft (cellW).reduced (4));
-        }
-    };
-
-    auto rowW   = rightCol.removeFromTop (rowH); layoutRow (rowW, wLabel, { &kWLow, &kWMid, &kWHigh });
-    rightCol.removeFromTop (rowGap);
-    auto rowX   = rightCol.removeFromTop (rowH); layoutRow (rowX, xLabel, { &kFLow, &kFHigh });
-    rightCol.removeFromTop (rowGap);
-
-    // Side processing row: tilt + monomaker(toggle + freq)
-    auto rowS = rightCol.removeFromTop (rowH);
-    sideLabel.setBounds (rowS.removeFromTop (16));
-    {
-        int cellW = rowS.getWidth() / 3;
-        layoutKnob (kTilt, rowS.removeFromLeft (cellW).reduced (4));
-        // Mono section
-        auto monoArea = rowS.removeFromLeft (cellW * 2);
-        monoLabel.setBounds (monoArea.removeFromTop (14));
-        int half = monoArea.getWidth() / 2;
-        monoToggle.setBounds (monoArea.removeFromLeft (half).reduced (8, monoArea.getHeight() / 4));
-        layoutKnob (kMonoFreq, monoArea.reduced (4));
+        rWidth = right.removeFromTop (rowH);
+        auto body = rWidth.reduced (10, 4);
+        body.removeFromTop (titleH);
+        int cellW = body.getWidth() / 3;
+        layoutKnob (kWLow,  body.removeFromLeft (cellW));
+        layoutKnob (kWMid,  body.removeFromLeft (cellW));
+        layoutKnob (kWHigh, body);
+        right.removeFromTop (gap);
     }
-    rightCol.removeFromTop (rowGap);
 
-    auto rowD = rightCol.removeFromTop (rowH); layoutRow (rowD, deessLabel, { &kDeessFreq, &kDeessThresh, &kDeessRange }, &deessToggle);
-    rightCol.removeFromTop (rowGap);
-
-    auto rowO = rightCol.removeFromTop (rowH);
+    // Row 2 — Crossover (left, 2/3) + Side Tilt (right, 1/3)
     {
-        rowO.removeFromTop (16);
-        int cellW = rowO.getWidth() / 3;
-        layoutKnob (kOutput, rowO.removeFromLeft (cellW).withSizeKeepingCentre (cellW, rowO.getHeight()).reduced (4));
+        auto row = right.removeFromTop (rowH);
+        rXover = row.removeFromLeft (row.getWidth() * 2 / 3);
+        rXover.removeFromRight (gap / 2);
+        rTilt = row;
+        rTilt.removeFromLeft (gap / 2);
+
+        auto xBody = rXover.reduced (10, 4);
+        xBody.removeFromTop (titleH);
+        int xCellW = xBody.getWidth() / 2;
+        layoutKnob (kFLow,  xBody.removeFromLeft (xCellW));
+        layoutKnob (kFHigh, xBody);
+
+        auto tBody = rTilt.reduced (10, 4);
+        tBody.removeFromTop (titleH);
+        layoutKnob (kTilt, tBody);
+
+        right.removeFromTop (gap);
+    }
+
+    // Row 3 — Monomaker (toggle on left, freq knob on right)
+    {
+        rMono = right.removeFromTop (rowH);
+        auto body = rMono.reduced (10, 4);
+        body.removeFromTop (titleH);
+        int half = body.getWidth() / 2;
+        auto togCell = body.removeFromLeft (half);
+        monoToggle.setBounds (togCell.withSizeKeepingCentre (60, std::min (28, togCell.getHeight() - 8)));
+        layoutKnob (kMonoFreq, body);
+        right.removeFromTop (gap);
+    }
+
+    // Row 4 — Side De-esser (toggle + 3 knobs)
+    {
+        rDeess = right.removeFromTop (rowH);
+        auto body = rDeess.reduced (10, 4);
+        body.removeFromTop (titleH);
+        int cellW = body.getWidth() / 4;
+        auto togCell = body.removeFromLeft (cellW);
+        deessToggle.setBounds (togCell.withSizeKeepingCentre (60, std::min (28, togCell.getHeight() - 8)));
+        layoutKnob (kDeessFreq,   body.removeFromLeft (cellW));
+        layoutKnob (kDeessThresh, body.removeFromLeft (cellW));
+        layoutKnob (kDeessRange,  body);
+        right.removeFromTop (gap);
+    }
+
+    // Row 5 — Output
+    {
+        rOutput = right.removeFromTop (rowH);
+        auto body = rOutput.reduced (10, 4);
+        body.removeFromTop (titleH);
+        // Centre the single knob, sized to roughly match the other knob columns
+        int knobW = juce::jlimit (90, 180, body.getHeight());
+        auto cell = body.withSizeKeepingCentre (knobW, body.getHeight());
+        layoutKnob (kOutput, cell);
     }
 }

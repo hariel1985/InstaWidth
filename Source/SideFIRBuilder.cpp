@@ -17,43 +17,59 @@ void SideFIRBuilder::stop()
     stopThread (2000);
 }
 
+namespace
+{
+    // Update an atomic only if the new value differs; returns true if it actually changed.
+    template <typename T>
+    bool storeIfChanged (std::atomic<T>& a, T v)
+    {
+        T old = a.load (std::memory_order_relaxed);
+        if (old == v) return false;
+        a.store (v, std::memory_order_relaxed);
+        return true;
+    }
+}
+
 void SideFIRBuilder::setFFTOrder (int order)
 {
-    fftOrder.store (juce::jlimit (minFFTOrder, maxFFTOrder, order));
-    needsUpdate.store (true);
-    notify();
+    if (storeIfChanged (fftOrder, juce::jlimit (minFFTOrder, maxFFTOrder, order)))
+    {
+        needsUpdate.store (true);
+        notify();
+    }
 }
 
 void SideFIRBuilder::setCrossovers (float fl, float fh)
 {
-    fLow.store  (juce::jlimit (40.0f, 1000.0f, fl));
-    fHigh.store (juce::jlimit (500.0f, 18000.0f, std::max (fh, fl + 50.0f)));
-    needsUpdate.store (true);
-    notify();
+    const float clFL = juce::jlimit (40.0f, 1000.0f, fl);
+    const float clFH = juce::jlimit (500.0f, 18000.0f, std::max (fh, fl + 50.0f));
+    bool changed = storeIfChanged (fLow, clFL);
+    changed |= storeIfChanged (fHigh, clFH);
+    if (changed) { needsUpdate.store (true); notify(); }
 }
 
 void SideFIRBuilder::setWidths (float wl, float wm, float wh)
 {
-    wLow.store  (juce::jlimit (0.0f, 2.0f, wl));
-    wMid.store  (juce::jlimit (0.0f, 2.0f, wm));
-    wHigh.store (juce::jlimit (0.0f, 2.0f, wh));
-    needsUpdate.store (true);
-    notify();
+    bool changed = storeIfChanged (wLow,  juce::jlimit (0.0f, 2.0f, wl));
+    changed |= storeIfChanged (wMid,  juce::jlimit (0.0f, 2.0f, wm));
+    changed |= storeIfChanged (wHigh, juce::jlimit (0.0f, 2.0f, wh));
+    if (changed) { needsUpdate.store (true); notify(); }
 }
 
 void SideFIRBuilder::setSideTilt (float t)
 {
-    tiltDb.store (juce::jlimit (-6.0f, 6.0f, t));
-    needsUpdate.store (true);
-    notify();
+    if (storeIfChanged (tiltDb, juce::jlimit (-6.0f, 6.0f, t)))
+    {
+        needsUpdate.store (true);
+        notify();
+    }
 }
 
 void SideFIRBuilder::setMonomaker (bool on, float cutoff)
 {
-    monoOn.store (on);
-    monoFreq.store (juce::jlimit (20.0f, 500.0f, cutoff));
-    needsUpdate.store (true);
-    notify();
+    bool changed = storeIfChanged (monoOn, on);
+    changed |= storeIfChanged (monoFreq, juce::jlimit (20.0f, 500.0f, cutoff));
+    if (changed) { needsUpdate.store (true); notify(); }
 }
 
 std::unique_ptr<juce::AudioBuffer<float>> SideFIRBuilder::getNewFIR()
@@ -71,10 +87,21 @@ void SideFIRBuilder::run()
         if (needsUpdate.exchange (false))
         {
             auto fir = generate (sampleRate.load(), fftOrder.load());
-            const juce::SpinLock::ScopedLockType lock (firLock);
-            pendingFIR = std::make_unique<juce::AudioBuffer<float>> (std::move (fir));
+            {
+                const juce::SpinLock::ScopedLockType lock (firLock);
+                pendingFIR = std::make_unique<juce::AudioBuffer<float>> (std::move (fir));
+            }
+            // Debounce — give the audio thread + JUCE convolution time to consume this IR
+            // and finish its internal partitioning before we possibly queue another one.
+            // Critical for large IRs (8192/16384 taps), where the convolution's preparation
+            // is slow enough that constant reloads otherwise leave it permanently un-prepared
+            // (resulting in silent output, i.e. "full mono" in M/S decode).
+            wait (150);
         }
-        wait (40);
+        else
+        {
+            wait (-1);  // sleep indefinitely until notify()
+        }
     }
 }
 

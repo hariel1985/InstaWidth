@@ -59,8 +59,11 @@ private:
     KnobUnit kTilt;
     KnobUnit kMonoFreq;
     juce::ToggleButton monoToggle;
-    juce::Label monoLabel { {}, "MONOMAKER" };
-    juce::Label sideLabel { {}, "SIDE PROC" };
+    juce::Label monoLabel  { {}, "MONOMAKER" };
+    juce::Label tiltLabel  { {}, "SIDE TILT" };
+
+    // Cached section rectangles for paint() — populated from resized()
+    juce::Rectangle<int> rWidth, rXover, rMono, rTilt, rDeess, rOutput;
 
     // De-esser
     juce::ToggleButton deessToggle;
