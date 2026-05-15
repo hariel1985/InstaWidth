@@ -82,8 +82,8 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     configureKnob (kWLow,  "LOW",  "wLow");
     configureKnob (kWMid,  "MID",  "wMid");
     configureKnob (kWHigh, "HIGH", "wHigh");
-    configureKnob (kFLow,  "L\xe2\x86\x92M",  "fLow",  true);
-    configureKnob (kFHigh, "M\xe2\x86\x92H",  "fHigh", true);
+    configureKnob (kFLow,  "L-M",  "fLow",  true);
+    configureKnob (kFHigh, "M-H",  "fHigh", true);
     configureKnob (kTilt,        "TILT",   "tilt");
     configureKnob (kMonoFreq,    "FREQ",   "monoFreq", true);
     configureKnob (kDeessFreq,   "FREQ",   "deessFreq", true);
@@ -109,88 +109,96 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
 
 void InstaWidthEditor::installTooltips()
 {
-    bypassToggle.setTooltip ("Bypass — a teljes plugin megkerülése. A bemenet változatlanul megy a kimenetre.");
+    bypassToggle.setTooltip ("Bypass the whole plugin -- input passes through unprocessed.");
 
     modeBox.setTooltip (
-        "Feldolgozási mód.\n"
-        "• Minimum Phase: IIR, alacsony CPU, nulla latency. Klasszikus karakter — tracking és live.\n"
-        "• Linear Phase: szimmetrikus FIR konvolúció, nulla fáziseltolás, latencyt ad (DAW kompenzálja).\n"
-        "  Masteringre és párhuzamos buszokra ajánlott.");
+        "Processing mode.\n"
+        "- Minimum Phase: IIR-based. Low CPU, zero latency, classic character.\n"
+        "  Best for tracking and live monitoring.\n"
+        "- Linear Phase: symmetric FIR convolution. Zero phase distortion but\n"
+        "  adds latency (the DAW compensates automatically). Best for mastering\n"
+        "  and parallel buses.");
 
     firBox.setTooltip (
-        "FIR felbontás (csak Linear Phase módban).\n"
-        "Több tap = pontosabb átmenet a crossovereknél, de nagyobb latency.\n"
-        "512 (~6 ms) • 2048 (~23 ms) • 8192 (~93 ms) • 16384 (~186 ms).");
+        "FIR length (Linear Phase mode only).\n"
+        "More taps = sharper crossover transitions, but more latency.\n"
+        "512 (~6 ms)  -  2048 (~23 ms)  -  8192 (~93 ms)  -  16384 (~186 ms).");
 
     kWLow.knob.setTooltip (
-        "LOW Stereo Width — szélességszorzó a basszus sávban (L→M crossover alatt).\n"
-        "0% = teljes mono • 100% = változatlan • 200% = duplázott side jel.\n"
-        "Basszusnál legtöbbször érdemes 100% körül tartani, vagy a Monomakert használni.");
+        "LOW Stereo Width -- width multiplier for the bass band (below the L-M crossover).\n"
+        "0% = full mono   100% = unchanged   200% = doubled side signal.\n"
+        "Keep low bass close to 100%, or use Monomaker for mono safety -- bass\n"
+        "summed out of phase will cancel on mono playback systems.");
     kWMid.knob.setTooltip (
-        "MID Stereo Width — szélesség a közép sávban (a két crossover között).\n"
-        "Itt ülnek általában a vokálok, kick test, snare — óvatosan!\n"
-        "0% = mono, 100% = változatlan, 200% = dupla side.");
+        "MID Stereo Width -- width in the mid band (between the two crossovers).\n"
+        "This is where vocals, kick body and snare usually sit -- handle with care.\n"
+        "0% = mono, 100% = unchanged, 200% = doubled side.");
     kWHigh.knob.setTooltip (
-        "HIGH Stereo Width — szélesség a magas sávban (M→H crossover felett).\n"
-        "Air, cymbalok, presence — bátran lehet szélesíteni.\n"
-        "0% = mono, 100% = változatlan, 200% = dupla side.");
+        "HIGH Stereo Width -- width in the high band (above the M-H crossover).\n"
+        "Air, cymbals, presence -- generally safe to widen aggressively.\n"
+        "0% = mono, 100% = unchanged, 200% = doubled side.");
 
     kFLow.knob.setTooltip (
-        "Low–Mid crossover frekvencia.\n"
-        "Linkwitz–Riley 24 dB/oct lejtővel.\n"
-        "Tipikusan a kick alapharmonikusa felett (80–200 Hz).");
+        "Low / Mid crossover frequency.\n"
+        "Linkwitz-Riley 24 dB/oct slope.\n"
+        "Typically set just above the kick fundamental (80-200 Hz).");
     kFHigh.knob.setTooltip (
-        "Mid–High crossover frekvencia.\n"
-        "Linkwitz–Riley 24 dB/oct.\n"
-        "A fő test (vocal, snare) felett, a presence/air alatt (1–4 kHz).");
+        "Mid / High crossover frequency.\n"
+        "Linkwitz-Riley 24 dB/oct.\n"
+        "Above the main body (vocal, snare), below the presence/air region (1-4 kHz).");
 
     kTilt.knob.setTooltip (
-        "Side Tilt EQ — spektrumbillentés csak a side csatornán.\n"
-        "Negatív = sötétebb, fókuszáltabb hangkép (a side basszusa nagyobb, magasa kisebb).\n"
-        "Pozitív = airy, szellősebb hangkép (a side magasa nagyobb, basszusa kisebb).\n"
-        "Pivot 1 kHz, ±6 dB a végeken. A mid (center) csatornát nem érinti.");
+        "Side Tilt EQ -- spectral tilt on the SIDE channel only.\n"
+        "Negative = darker, more focused stereo image (more side bass, less side highs).\n"
+        "Positive = airier, breathier image (more side highs, less side bass).\n"
+        "Pivot at 1 kHz, +/- 6 dB at the ends.\n"
+        "The MID (center) channel is left completely untouched.");
 
     monoToggle.setTooltip (
-        "Monomaker be/ki.\n"
-        "Bekapcsolva a side jelet HP szűri a cutoff alatt — minden mono lesz az alacsony tartományban.\n"
-        "Klubokon, basszus-szórókon, mono playback esetén elengedhetetlen biztonság a sub-kioltódás ellen.");
+        "Monomaker on/off.\n"
+        "When on, the side channel is high-pass filtered below the cutoff,\n"
+        "making everything mono in the low end. Essential safety against\n"
+        "sub-bass cancellation on mono playback (clubs, mobile speakers, radio).");
     kMonoFreq.knob.setTooltip (
-        "Monomaker cutoff.\n"
-        "E frekvencia alatt a side jel eltűnik → teljes mono.\n"
-        "Default 120 Hz • Range 20–500 Hz.\n"
-        "Magasabb cutoff = biztonságosabb, de kevesebb stereo levegő alulról.");
+        "Monomaker cutoff frequency.\n"
+        "Below this, the side signal is suppressed -> full mono.\n"
+        "Default 120 Hz, range 20-500 Hz.\n"
+        "Higher cutoff = safer mono compatibility, less stereo air down low.");
 
     deessToggle.setTooltip (
-        "Side de-esser be/ki.\n"
-        "Dinamikus gain reduction csak a side csatornán a detektor sávjában.\n"
-        "A mid (center) csatorna teljesen érintetlen marad — a vocal nem szerencsétlenül \"hortyog\".");
+        "Side de-esser on/off.\n"
+        "Dynamic gain reduction applied to the SIDE channel only,\n"
+        "in the detector's frequency band.\n"
+        "The MID (center) channel is completely unaffected -- vocals do not lisp.");
     kDeessFreq.knob.setTooltip (
-        "De-esser detector center frekvencia.\n"
-        "Sibilance/cymbal-élesség a side-on — tipikusan 5–8 kHz.");
+        "De-esser detector center frequency.\n"
+        "Tune this to the sibilance / cymbal harshness on the side --\n"
+        "typically 5-8 kHz.");
     kDeessThresh.knob.setTooltip (
         "De-esser threshold.\n"
-        "Ezen szint felett kezd csillapítani.\n"
-        "Negatívabb érték = érzékenyebb, hamarabb kapcsol be.");
+        "Above this level the side gets attenuated.\n"
+        "More negative = more sensitive, triggers sooner.");
     kDeessRange.knob.setTooltip (
-        "Maximum gain reduction a side csatornán.\n"
-        "0 dB = nincs hatás, 24 dB = nagyon erőteljes lerántás amikor triggerel.");
+        "Maximum gain reduction on the side channel.\n"
+        "0 dB = no effect, 24 dB = very heavy duck when it triggers.");
 
-    kOutput.knob.setTooltip ("Output gain — a teljes plugin kimenete után, ±24 dB.");
+    kOutput.knob.setTooltip ("Output gain -- final stage after all processing, +/- 24 dB.");
 
     goniometer.setTooltip (
-        "Stereo goniometer (Lissajous figura).\n"
-        "Az L/R jel 45°-kal forgatva — függőleges tengely = mid (mono), vízszintes = side.\n"
-        "Keskeny, függőleges kép = mono-kompatibilis.\n"
-        "Vízszintes vonal = teljes antifázis (rossz).\n"
-        "Széles, kerekded felhő = egészséges stereo.");
+        "Stereo goniometer (Lissajous display).\n"
+        "L/R rotated by 45 deg -- vertical axis = MID (mono), horizontal axis = SIDE.\n"
+        "Narrow, vertical pattern = mono-compatible.\n"
+        "Horizontal line = full anti-phase (bad).\n"
+        "Round fluffy cloud = healthy stereo.");
     corrMeter.setTooltip (
-        "Pearson korreláció L és R között, sávonként.\n"
-        "LOW / MID / HIGH = az adott frekvenciatartomány korrelációja.\n"
-        "OVERALL = teljes spektrum.\n"
-        "+1 = mono, 0 = független, −1 = teljes antifázis.\n"
-        "A piros figyelmeztetés csak akkor villan fel, ha egy sáv tartósan a küszöbe alatt marad\n"
-        "(LOW küszöbe −0.05, MID −0.30, HIGH −0.45 — modern masterek MID/HIGH-ja gyakran enyhén\n"
-        "negatív, ez normális).");
+        "Pearson correlation between L and R, per band.\n"
+        "LOW / MID / HIGH = correlation inside that frequency range.\n"
+        "OVERALL = full-spectrum correlation.\n"
+        "+1 = mono, 0 = independent, -1 = full anti-phase.\n"
+        "The red warning only fires when a band stays below its threshold for ~330 ms\n"
+        "(LOW threshold -0.05, MID -0.30, HIGH -0.45). Modern commercial masters\n"
+        "often sit slightly negative in the MID/HIGH bands -- that is normal and\n"
+        "intentional for stereo width.");
 }
 
 InstaWidthEditor::~InstaWidthEditor()
