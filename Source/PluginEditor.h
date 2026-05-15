@@ -51,7 +51,7 @@ private:
     juce::Label  latencyLabel { {}, "0 ms" };
 
     // Auto Mono Safety toggle in the mode strip
-    juce::Label autoSafeLabel { {}, "AUTO MONO" };
+    juce::Label autoSafeLabel { {}, "AUTO MONO SAFETY" };
     juce::ToggleButton autoSafeToggle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoSafeAttachment;
 

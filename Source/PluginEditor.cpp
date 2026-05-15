@@ -400,10 +400,10 @@ void InstaWidthEditor::resized()
     mode.removeFromLeft (16);
     firLabel .setBounds (mode.removeFromLeft (32));
     firBox   .setBounds (mode.removeFromLeft (110).reduced (2, 6));
-    latencyLabel.setBounds (mode.removeFromLeft (180).reduced (8, 6));
+    latencyLabel.setBounds (mode.removeFromLeft (150).reduced (8, 6));
 
-    // Auto Mono Safe toggle on the right side of the mode strip
-    auto safeArea = mode.removeFromRight (180);
+    // Auto Mono Safety toggle on the right side of the mode strip
+    auto safeArea = mode.removeFromRight (220);
     autoSafeToggle.setBounds (safeArea.removeFromRight (60).reduced (8, 6));
     autoSafeLabel .setBounds (safeArea.reduced (4, 6));
 
