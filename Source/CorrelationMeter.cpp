@@ -122,12 +122,26 @@ void CorrelationMeter::timerCallback()
         bandCorr[b] += (t - bandCorr[b]) * 0.3f;
     }
 
-    const bool anyNegative = displayCorrelation < 0.0f
-                          || bandCorr[0] < 0.0f
-                          || bandCorr[1] < 0.0f
-                          || bandCorr[2] < 0.0f;
-    if (anyNegative) warnFlash = std::min (1.0f, warnFlash + 0.12f);
-    else             warnFlash = std::max (0.0f, warnFlash - 0.04f);
+    // Per-band thresholds — calibrated to skip the normal "spacious" negative correlation
+    // that commercial masters routinely sit at in the mid/high bands. The LOW band is kept
+    // strict because sub-bass cancellation in mono is always a real problem.
+    constexpr float kThreshold[kNumBands] = { -0.05f, -0.30f, -0.45f };
+    constexpr int   kHoldTicks            = 10;  // ~330 ms at 30 Hz before we trigger
+    constexpr int   kReleaseStep          = 2;   // hysteresis: release ~2× faster than attack
+
+    for (int b = 0; b < kNumBands; ++b)
+    {
+        if (bandCorr[b] < kThreshold[b])
+            negativeHold[b] = std::min (negativeHold[b] + 1, kHoldTicks * 3);
+        else
+            negativeHold[b] = std::max (0, negativeHold[b] - kReleaseStep);
+
+        bandTriggered[b] = negativeHold[b] >= kHoldTicks;
+    }
+
+    const bool anyTriggered = bandTriggered[0] || bandTriggered[1] || bandTriggered[2];
+    if (anyTriggered) warnFlash = std::min (1.0f, warnFlash + 0.12f);
+    else              warnFlash = std::max (0.0f, warnFlash - 0.04f);
 
     repaint();
 }
@@ -216,13 +230,13 @@ void CorrelationMeter::paint (juce::Graphics& g)
     auto overallStrip = stripArea.removeFromTop (overallH);
     drawCorrStrip (overallStrip, displayCorrelation, "OVERALL", true);
 
-    // Warning overlay — name the offending band(s)
+    // Warning overlay — name only the bands that have triggered the sustained negative hold
     if (warnFlash > 0.01f)
     {
         juce::String msg = "MONO-INCOMPATIBLE";
         juce::StringArray names;
         for (int b = 0; b < kNumBands; ++b)
-            if (bandCorr[b] < 0.0f) names.add (kBandLabels[b]);
+            if (bandTriggered[b]) names.add (kBandLabels[b]);
         if (! names.isEmpty())
             msg += ": " + names.joinIntoString (" + ");
 

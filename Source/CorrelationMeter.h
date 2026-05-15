@@ -5,7 +5,9 @@
 //   Bands match the main DSP crossovers (Low/Mid/High at fLow and fHigh).
 //   The display shows a stacked set of bars so the user can see WHICH frequency
 //   region is going mono-incompatible — and the warning text names the band(s).
-class CorrelationMeter : public juce::Component, private juce::Timer
+class CorrelationMeter : public juce::Component,
+                         public juce::SettableTooltipClient,
+                         private juce::Timer
 {
 public:
     CorrelationMeter();
@@ -53,5 +55,7 @@ private:
     // Display state (GUI thread)
     float displayCorrelation = 1.0f;
     std::array<float, 3> bandCorr { 1.0f, 1.0f, 1.0f };
+    std::array<int, 3>   negativeHold { 0, 0, 0 };   // ticks below threshold (hysteresis)
+    std::array<bool, 3>  bandTriggered { false, false, false };
     float warnFlash = 0.0f;
 };

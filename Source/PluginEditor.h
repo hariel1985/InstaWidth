@@ -20,6 +20,9 @@ private:
 
     InstaWidthProcessor& processor;
     InstaWidthLookAndFeel lookAndFeel;
+    juce::TooltipWindow tooltipWindow { this, 600 };  // 600 ms hover delay
+
+    void installTooltips();
 
     // Helper to build a labelled rotary slider attached to an APVTS parameter
     struct KnobUnit

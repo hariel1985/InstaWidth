@@ -7,7 +7,9 @@
 //
 // The display is rotated 45° so vertical = mono (mid) and horizontal = side, which is
 // the conventional audio-engineer orientation (vs. mathematical L vs R).
-class Goniometer : public juce::Component, private juce::Timer
+class Goniometer : public juce::Component,
+                   public juce::SettableTooltipClient,
+                   private juce::Timer
 {
 public:
     Goniometer();
