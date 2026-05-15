@@ -59,6 +59,53 @@ void InstaWidthLookAndFeel::drawBackgroundTexture (juce::Graphics& g, juce::Rect
             g.drawImageAt (noiseTexture, x, y);
 }
 
+// =========================================================
+// Tooltips — non-bold body, left-aligned text
+// =========================================================
+namespace
+{
+    juce::TextLayout layoutInstaTooltip (const juce::String& text, juce::Colour colour)
+    {
+        constexpr float fontSize       = 13.0f;
+        constexpr float maxToolTipW    = 440.0f;
+        juce::AttributedString s;
+        s.setJustification (juce::Justification::topLeft);
+        s.setWordWrap (juce::AttributedString::byWord);
+        s.append (text, juce::Font (juce::FontOptions (fontSize)), colour);  // no Font::bold
+        juce::TextLayout tl;
+        tl.createLayout (s, maxToolTipW);
+        return tl;
+    }
+}
+
+juce::Rectangle<int> InstaWidthLookAndFeel::getTooltipBounds (const juce::String& tipText,
+                                                              juce::Point<int> screenPos,
+                                                              juce::Rectangle<int> parentArea)
+{
+    const auto tl = layoutInstaTooltip (tipText, juce::Colours::black);
+    const int w = (int) (tl.getWidth()  + 16.0f);
+    const int h = (int) (tl.getHeight() + 10.0f);
+    return juce::Rectangle<int> (
+        screenPos.x > parentArea.getCentreX() ? screenPos.x - (w + 12) : screenPos.x + 24,
+        screenPos.y > parentArea.getCentreY() ? screenPos.y - (h + 6)  : screenPos.y + 6,
+        w, h).constrainedWithin (parentArea);
+}
+
+void InstaWidthLookAndFeel::drawTooltip (juce::Graphics& g, const juce::String& text,
+                                          int width, int height)
+{
+    const juce::Rectangle<float> bounds ((float) width, (float) height);
+
+    g.setColour (findColour (juce::TooltipWindow::backgroundColourId));
+    g.fillRoundedRectangle (bounds, 5.0f);
+
+    g.setColour (findColour (juce::TooltipWindow::outlineColourId));
+    g.drawRoundedRectangle (bounds.reduced (0.5f, 0.5f), 5.0f, 1.0f);
+
+    const auto tl = layoutInstaTooltip (text, findColour (juce::TooltipWindow::textColourId));
+    tl.draw (g, juce::Rectangle<float> (8.0f, 5.0f, (float) width - 16.0f, (float) height - 10.0f));
+}
+
 // 3D metal rotary
 void InstaWidthLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
                                               float sliderPos, float rotaryStartAngle,

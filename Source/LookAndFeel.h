@@ -39,6 +39,12 @@ public:
 
     juce::Typeface::Ptr getTypefaceForFont (const juce::Font& font) override;
 
+    // Tooltips: non-bold, left-aligned
+    juce::Rectangle<int> getTooltipBounds (const juce::String& tipText,
+                                            juce::Point<int> screenPos,
+                                            juce::Rectangle<int> parentArea) override;
+    void drawTooltip (juce::Graphics& g, const juce::String& text, int width, int height) override;
+
 private:
     juce::Typeface::Ptr typefaceRegular;
     juce::Typeface::Ptr typefaceMedium;

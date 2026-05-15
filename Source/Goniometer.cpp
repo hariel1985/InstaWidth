@@ -86,11 +86,11 @@ void Goniometer::paint (juce::Graphics& g)
 
     // Axis labels
     g.setColour (InstaWidthLookAndFeel::textSecondary.withAlpha (0.7f));
-    g.setFont (juce::FontOptions().withHeight (10.0f));
-    g.drawText ("M",  juce::Rectangle<float> (cx - 10, cy - r - 14, 20, 12), juce::Justification::centred);
-    g.drawText ("-M", juce::Rectangle<float> (cx - 12, cy + r + 2,  24, 12), juce::Justification::centred);
-    g.drawText ("+S", juce::Rectangle<float> (cx + r - 4, cy - 6, 24, 12), juce::Justification::centredLeft);
-    g.drawText ("-S", juce::Rectangle<float> (cx - r - 20, cy - 6, 24, 12), juce::Justification::centredRight);
+    g.setFont (juce::FontOptions().withHeight (12.5f));
+    g.drawText ("M",  juce::Rectangle<float> (cx - 12, cy - r - 18, 24, 16), juce::Justification::centred);
+    g.drawText ("-M", juce::Rectangle<float> (cx - 14, cy + r + 2,  28, 16), juce::Justification::centred);
+    g.drawText ("+S", juce::Rectangle<float> (cx + r - 4, cy - 8, 28, 16), juce::Justification::centredLeft);
+    g.drawText ("-S", juce::Rectangle<float> (cx - r - 24, cy - 8, 28, 16), juce::Justification::centredRight);
 
     // Phosphor trace
     if (phosphor.isValid())

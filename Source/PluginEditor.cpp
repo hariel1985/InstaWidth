@@ -357,22 +357,23 @@ void InstaWidthEditor::resized()
                                                 (float) getHeight() / (float) kDefaultH));
 
     const int targetKnobSize = juce::jlimit (70, 150, (int) (90.0f * scale));
-    const int captionH       = juce::jlimit (14, 22,  (int) (16.0f * scale));
-    const int valueH         = juce::jlimit (14, 22,  (int) (16.0f * scale));
-    const int sectionTitleH  = juce::jlimit (18, 28,  (int) (20.0f * scale));
+    // All text sizes are ~25% larger than the prior visual baseline.
+    const int captionH       = juce::jlimit (17, 28,  (int) (20.0f * scale));
+    const int valueH         = juce::jlimit (17, 28,  (int) (20.0f * scale));
+    const int sectionTitleH  = juce::jlimit (22, 34,  (int) (25.0f * scale));
 
-    const float captionFontH = juce::jlimit (10.5f, 16.0f, 11.0f * scale);
-    const float valueFontH   = juce::jlimit (10.5f, 16.0f, 11.0f * scale);
-    const float sectionTitleFontH = juce::jlimit (11.0f, 16.0f, 11.5f * scale);
-    const float titleFontH   = juce::jlimit (22.0f, 32.0f, 24.0f * scale);
+    const float captionFontH      = juce::jlimit (13.0f, 20.0f, 13.75f * scale);
+    const float valueFontH        = juce::jlimit (13.0f, 20.0f, 13.75f * scale);
+    const float sectionTitleFontH = juce::jlimit (14.0f, 20.0f, 14.4f  * scale);
+    const float titleFontH        = juce::jlimit (28.0f, 40.0f, 30.0f  * scale);
 
     titleLabel.setFont   (lookAndFeel.getBoldFont    (titleFontH));
-    versionLabel.setFont (lookAndFeel.getRegularFont (juce::jlimit (11.0f, 14.0f, 12.0f * scale)));
-    bypassLabel.setFont  (lookAndFeel.getMediumFont  (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
-    modeLabel.setFont    (lookAndFeel.getMediumFont  (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
-    firLabel.setFont     (lookAndFeel.getMediumFont  (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
-    latencyLabel.setFont (lookAndFeel.getRegularFont (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
-    autoSafeLabel.setFont (lookAndFeel.getMediumFont (juce::jlimit (10.5f, 14.0f, 11.0f * scale)));
+    versionLabel.setFont (lookAndFeel.getRegularFont (juce::jlimit (14.0f, 18.0f, 15.0f   * scale)));
+    bypassLabel.setFont  (lookAndFeel.getMediumFont  (juce::jlimit (13.0f, 17.5f, 13.75f * scale)));
+    modeLabel.setFont    (lookAndFeel.getMediumFont  (juce::jlimit (13.0f, 17.5f, 13.75f * scale)));
+    firLabel.setFont     (lookAndFeel.getMediumFont  (juce::jlimit (13.0f, 17.5f, 13.75f * scale)));
+    latencyLabel.setFont (lookAndFeel.getRegularFont (juce::jlimit (13.0f, 17.5f, 13.75f * scale)));
+    autoSafeLabel.setFont (lookAndFeel.getMediumFont (juce::jlimit (13.0f, 17.5f, 13.75f * scale)));
 
     for (auto* lbl : { &wLabel, &xLabel, &monoLabel, &tiltLabel, &deessLabel })
         lbl->setFont (lookAndFeel.getBoldFont (sectionTitleFontH));
@@ -408,7 +409,7 @@ void InstaWidthEditor::resized()
     autoSafeLabel .setBounds (safeArea.reduced (4, 6));
 
     // ---- Correlation strip at the very bottom (4 stacked sub-bars: Low/Mid/High/Overall)
-    auto bottom = area.removeFromBottom (juce::jlimit (78, 110, (int) (88.0f * scale)));
+    auto bottom = area.removeFromBottom (juce::jlimit (104, 140, (int) (112.0f * scale)));
     corrMeter.setBounds (bottom.reduced (14, 6));
 
     area.reduce (12, 12);

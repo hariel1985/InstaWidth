@@ -61,9 +61,9 @@ void CorrelationMeter::paint (juce::Graphics& g)
     g.fillRect (bounds);
 
     const int totalH    = bounds.getHeight();
-    const int labelColW = 44;
+    const int labelColW = 64;
     const int padding   = 3;
-    const int overallH  = juce::jlimit (16, 26, totalH * 38 / 100);
+    const int overallH  = juce::jlimit (20, 32, totalH * 38 / 100);
     const int bandsH    = totalH - overallH - padding;
     const int perBandH  = (bandsH - padding * (kNumBands - 1)) / kNumBands;
 
@@ -81,7 +81,7 @@ void CorrelationMeter::paint (juce::Graphics& g)
         if (leftLabel.isNotEmpty())
         {
             g.setColour (InstaWidthLookAndFeel::textSecondary);
-            g.setFont (juce::FontOptions().withHeight ((float) std::min (12, area.getHeight() - 2)));
+            g.setFont (juce::FontOptions().withHeight ((float) std::min (15, area.getHeight() - 2)));
             g.drawText (leftLabel, area.removeFromLeft (labelColW).reduced (4, 0),
                         juce::Justification::centredLeft);
         }
@@ -122,7 +122,7 @@ void CorrelationMeter::paint (juce::Graphics& g)
         if (drawScale)
         {
             g.setColour (InstaWidthLookAndFeel::textSecondary);
-            g.setFont (juce::FontOptions().withHeight (9.0f));
+            g.setFont (juce::FontOptions().withHeight (11.0f));
             g.drawText ("-1", area.withTrimmedRight (area.getWidth() - 18),  juce::Justification::centredLeft);
             g.drawText ("0",  area.withSizeKeepingCentre (24, area.getHeight()), juce::Justification::centred);
             g.drawText ("+1", area.withTrimmedLeft  (area.getWidth() - 18),  juce::Justification::centredRight);
@@ -161,7 +161,7 @@ void CorrelationMeter::paint (juce::Graphics& g)
         g.fillRect (bounds);
 
         g.setColour (juce::Colours::white.withAlpha (warnFlash));
-        const float fontH = juce::jlimit (11.0f, 18.0f, (float) (overallH - 4));
+        const float fontH = juce::jlimit (14.0f, 22.0f, (float) (overallH - 4));
         g.setFont (juce::FontOptions().withHeight (fontH).withStyle ("Bold"));
         g.drawText (msg, overallStrip, juce::Justification::centred);
     }
