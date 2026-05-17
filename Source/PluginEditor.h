@@ -4,6 +4,7 @@
 #include "LookAndFeel.h"
 #include "Goniometer.h"
 #include "CorrelationMeter.h"
+#include "GRMeter.h"
 
 class InstaWidthEditor : public juce::AudioProcessorEditor,
                          private juce::Timer
@@ -50,10 +51,12 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> firAttachment;
     juce::Label  latencyLabel { {}, "0 ms" };
 
-    // Auto Mono Safety toggle in the mode strip
+    // Auto Mono Safety toggle + response-speed selector in the mode strip
     juce::Label autoSafeLabel { {}, "AUTO MONO SAFETY" };
     juce::ToggleButton autoSafeToggle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> autoSafeAttachment;
+    juce::ComboBox autoSafeSpeedBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> autoSafeSpeedAttachment;
 
     // Width knobs
     KnobUnit kWLow, kWMid, kWHigh;
@@ -87,6 +90,7 @@ private:
     // Visualisation
     Goniometer goniometer;
     CorrelationMeter corrMeter;
+    GRMeter deesserGR;
 
     juce::ComponentBoundsConstrainer constrainer;
 

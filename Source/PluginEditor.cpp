@@ -2,12 +2,12 @@
 
 namespace
 {
-    constexpr int kMinW = 1000;
-    constexpr int kMinH = 620;
+    constexpr int kMinW = 1100;
+    constexpr int kMinH = 660;
     constexpr int kMaxW = 1800;
     constexpr int kMaxH = 1100;
-    constexpr int kDefaultW = 1180;
-    constexpr int kDefaultH = 720;
+    constexpr int kDefaultW = 1240;
+    constexpr int kDefaultH = 740;
 }
 
 InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
@@ -76,6 +76,11 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     autoSafeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         processor.apvts, "autoSafe", autoSafeToggle);
 
+    autoSafeSpeedBox.addItemList (juce::StringArray { "Fast", "Medium", "Slow", "Mastering" }, 1);
+    addAndMakeVisible (autoSafeSpeedBox);
+    autoSafeSpeedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.apvts, "autoSafeSpeed", autoSafeSpeedBox);
+
     // Section header labels (text + colour set here, font set in resized())
     for (auto* lbl : { &wLabel, &xLabel, &monoLabel, &tiltLabel, &deessLabel })
     {
@@ -113,6 +118,10 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
     addAndMakeVisible (goniometer);
     addAndMakeVisible (corrMeter);
 
+    addAndMakeVisible (deesserGR);
+    deesserGR.setProvider ([this] { return processor.getDeesserGRdb(); });
+    deesserGR.setMaxDb (24.0f);
+
     installTooltips();
 
     startTimerHz (15);
@@ -121,6 +130,17 @@ InstaWidthEditor::InstaWidthEditor (InstaWidthProcessor& p)
 void InstaWidthEditor::installTooltips()
 {
     bypassToggle.setTooltip ("Bypass the whole plugin -- input passes through unprocessed.");
+
+    autoSafeSpeedBox.setTooltip (
+        "Auto Mono Safety response speed (envelope attack / release).\n"
+        "- Fast: 50 ms attack / 250 ms release. Snappy ducking.\n"
+        "  Best in Minimum Phase mode -- in Linear Phase the FIR rebuild rate\n"
+        "  gates the effective response, so 'Fast' there is no faster than the\n"
+        "  FIR debounce allows.\n"
+        "- Medium: 150 ms / 500 ms. Default. Catches most issues without pumping.\n"
+        "- Slow: 400 ms / 1500 ms. Gentle, mastering-friendly.\n"
+        "- Mastering: 1000 ms / 4000 ms. Almost set-and-forget; only intervenes\n"
+        "  on sustained mono-incompatibility, ignores transient excursions.");
 
     autoSafeToggle.setTooltip (
         "Auto Mono Safety.\n"
@@ -315,6 +335,13 @@ void InstaWidthEditor::timerCallback()
                               : juce::String (ms, 1) + " ms latency",
                           juce::dontSendNotification);
 
+    // FIR length selector + latency readout only make sense in Linear Phase mode;
+    // hide them in Min Phase to keep the strip uncluttered.
+    const bool isLinearPhase = (processor.getMode() == InstaWidthProcessor::LinearPhase);
+    firLabel    .setVisible (isLinearPhase);
+    firBox      .setVisible (isLinearPhase);
+    latencyLabel.setVisible (isLinearPhase);
+
     // Tell the meter whether auto-safety is on so it can render duck indicators.
     if (auto* a = processor.apvts.getRawParameterValue ("autoSafe"))
         corrMeter.setAutoSafetyEnabled (a->load() > 0.5f);
@@ -403,10 +430,12 @@ void InstaWidthEditor::resized()
     firBox   .setBounds (mode.removeFromLeft (110).reduced (2, 6));
     latencyLabel.setBounds (mode.removeFromLeft (150).reduced (8, 6));
 
-    // Auto Mono Safety toggle on the right side of the mode strip
-    auto safeArea = mode.removeFromRight (220);
-    autoSafeToggle.setBounds (safeArea.removeFromRight (60).reduced (8, 6));
-    autoSafeLabel .setBounds (safeArea.reduced (4, 6));
+    // Auto Mono Safety section on the right side of the mode strip:
+    //   [AUTO MONO SAFETY] [toggle] [speedBox]
+    auto safeArea = mode.removeFromRight (340);
+    autoSafeSpeedBox.setBounds (safeArea.removeFromRight (120).reduced (2, 6));
+    autoSafeToggle  .setBounds (safeArea.removeFromRight (60) .reduced (8, 6));
+    autoSafeLabel   .setBounds (safeArea.reduced (4, 6));
 
     // ---- Correlation strip at the very bottom (4 stacked sub-bars: Low/Mid/High/Overall)
     auto bottom = area.removeFromBottom (juce::jlimit (104, 140, (int) (112.0f * scale)));
@@ -520,10 +549,17 @@ void InstaWidthEditor::resized()
             layoutKnobBig (kMonoFreq, body);
         }
 
-        // SIDE DE-ESSER — toggle + 3 knobs
+        // SIDE DE-ESSER — toggle + 3 knobs + GR strip at the bottom
         {
             auto body = rDeess.reduced (12, 8);
             deessLabel.setBounds (body.removeFromTop (sectionTitleH));
+
+            const int grStripH = juce::jlimit (12, 22, (int) (16.0f * scale));
+            auto grStrip = body.removeFromBottom (grStripH);
+            // small left padding so the GR strip aligns visually with the knob column starts
+            grStrip.removeFromLeft (4); grStrip.removeFromRight (4);
+            deesserGR.setBounds (grStrip);
+
             int cellW = body.getWidth() / 4;
             auto togCell = body.removeFromLeft (cellW);
             int togH = juce::jlimit (26, 40, (int) (30.0f * scale));

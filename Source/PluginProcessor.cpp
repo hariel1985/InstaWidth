@@ -84,6 +84,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout InstaWidthProcessor::createL
     params.push_back (std::make_unique<juce::AudioParameterBool>(
         juce::ParameterID { "autoSafe", 1 }, "Auto Mono Safe", false));
 
+    params.push_back (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { "autoSafeSpeed", 1 }, "Auto Safe Speed",
+        juce::StringArray { "Fast", "Medium", "Slow", "Mastering" }, 1));  // default Medium
+
     return { params.begin(), params.end() };
 }
 
@@ -109,7 +113,8 @@ InstaWidthProcessor::InstaWidthProcessor()
     pDeessRange  = apvts.getRawParameterValue ("deessRange");
     pFIRQuality  = apvts.getRawParameterValue ("firQuality");
     pOutputDb    = apvts.getRawParameterValue ("output");
-    pAutoSafe    = apvts.getRawParameterValue ("autoSafe");
+    pAutoSafe      = apvts.getRawParameterValue ("autoSafe");
+    pAutoSafeSpeed = apvts.getRawParameterValue ("autoSafeSpeed");
 }
 
 InstaWidthProcessor::~InstaWidthProcessor()
@@ -253,12 +258,18 @@ void InstaWidthProcessor::updateAutoSafety (int blockSize)
     // an additional 0.30 below the threshold pulls safety down to 0 (full mono).
     constexpr float kDuckRange = 0.30f;
 
-    // Per-block attack/release coefficients. Slower than a peak limiter on purpose --
-    // the FIR builder cannot keep up with fast attacks at large tap counts, and even
-    // in min-phase mode a slower envelope avoids audible pumping on the stereo image.
+    // User-selectable response speed for the safety envelope. The FIR rebuild rate
+    // in Linear Phase mode is decoupled (it depends on FIR size + the hard debounce
+    // inside SideFIRBuilder), so the user choice mostly affects Min-Phase response;
+    // in Linear Phase mode the effective response is the slower of (smoothing, debounce).
+    constexpr float kAttack[4]  = { 0.050f, 0.150f, 0.400f, 1.000f }; // Fast / Med / Slow / Mastering
+    constexpr float kRelease[4] = { 0.250f, 0.500f, 1.500f, 4.000f };
+    const int speedIdx = juce::jlimit (0, 3,
+        pAutoSafeSpeed != nullptr ? (int) pAutoSafeSpeed->load() : 1);
+
     const double blockSec = (double) blockSize / std::max (1.0, currentSampleRate);
-    const float attackCoef  = (float) std::exp (-blockSec / 0.200);  // ~200 ms attack
-    const float releaseCoef = (float) std::exp (-blockSec / 0.800);  // ~800 ms release
+    const float attackCoef  = (float) std::exp (-blockSec / kAttack[speedIdx]);
+    const float releaseCoef = (float) std::exp (-blockSec / kRelease[speedIdx]);
 
     for (int b = 0; b < 3; ++b)
     {

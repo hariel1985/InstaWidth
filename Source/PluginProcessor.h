@@ -98,6 +98,12 @@ private:
     std::atomic<float>* pFIRQuality  = nullptr;
     std::atomic<float>* pOutputDb    = nullptr;
     std::atomic<float>* pAutoSafe    = nullptr;
+    std::atomic<float>* pAutoSafeSpeed = nullptr;
+
+public:
+    // Expose for editor — current GR (dB) of the side de-esser, for the in-panel GR strip.
+    float getDeesserGRdb() const { return deEsser.getCurrentGRdb(); }
+private:
 
     // Meter callback (set by editor)
     SampleCallback gonioCallback;

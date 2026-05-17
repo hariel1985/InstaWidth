@@ -38,6 +38,7 @@ target_sources(InstaWidth
         Source/Goniometer.cpp
         Source/CorrelationMeter.cpp
         Source/BandedCorrelation.cpp
+        Source/GRMeter.cpp
 )
 
 target_compile_definitions(InstaWidth
