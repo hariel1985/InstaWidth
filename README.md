@@ -4,6 +4,8 @@ Free, open-source M/S stereo width plugin built with JUCE. Available as VST3, AU
 
 ![VST3](https://img.shields.io/badge/format-VST3-blue) ![AU](https://img.shields.io/badge/format-AU-blue) ![LV2](https://img.shields.io/badge/format-LV2-blue) ![C++](https://img.shields.io/badge/language-C%2B%2B17-orange) ![JUCE](https://img.shields.io/badge/framework-JUCE-green) ![License](https://img.shields.io/badge/license-GPL--3.0-lightgrey) ![Build](https://github.com/hariel1985/InstaWidth/actions/workflows/build.yml/badge.svg)
 
+![InstaWidth screenshot](screenshot.jpg)
+
 ## What is it?
 
 InstaWidth is a Mid/Side stereo-width tool with **three frequency bands**, a **Monomaker** for low-end mono compatibility, a **side-channel Tilt EQ**, a **side de-esser**, a **live X/Y goniometer** and a **correlation meter** with mono-compatibility warning.
