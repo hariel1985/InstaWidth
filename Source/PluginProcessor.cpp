@@ -204,9 +204,9 @@ void InstaWidthProcessor::updateParametersFromAPVTS()
     // effective-width value every audio block, which forces the FIR builder to rebuild
     // continuously. For large IRs (8192/16384 taps) the JUCE convolution cannot finish
     // preparing one IR before the next one arrives, and outputs silence ("full mono").
-    // Quantising the safety to 5% steps lets the value sit still between transitions
+    // Quantising the safety to 10% steps lets the value sit still between transitions
     // so the convolution actually finishes its preparation.
-    auto quantise = [] (float v) { return std::round (v * 20.0f) * 0.05f; };
+    auto quantise = [] (float v) { return std::round (v * 10.0f) * 0.1f; };
     const float qs0 = quantise (s0);
     const float qs1 = quantise (s1);
     const float qs2 = quantise (s2);
@@ -253,10 +253,12 @@ void InstaWidthProcessor::updateAutoSafety (int blockSize)
     // an additional 0.30 below the threshold pulls safety down to 0 (full mono).
     constexpr float kDuckRange = 0.30f;
 
-    // Per-block attack/release coefficients
+    // Per-block attack/release coefficients. Slower than a peak limiter on purpose --
+    // the FIR builder cannot keep up with fast attacks at large tap counts, and even
+    // in min-phase mode a slower envelope avoids audible pumping on the stereo image.
     const double blockSec = (double) blockSize / std::max (1.0, currentSampleRate);
-    const float attackCoef  = (float) std::exp (-blockSec / 0.030);  // ~30 ms attack
-    const float releaseCoef = (float) std::exp (-blockSec / 0.400);  // ~400 ms release
+    const float attackCoef  = (float) std::exp (-blockSec / 0.200);  // ~200 ms attack
+    const float releaseCoef = (float) std::exp (-blockSec / 0.800);  // ~800 ms release
 
     for (int b = 0; b < 3; ++b)
     {

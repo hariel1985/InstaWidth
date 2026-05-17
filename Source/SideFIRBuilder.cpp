@@ -86,17 +86,34 @@ void SideFIRBuilder::run()
     {
         if (needsUpdate.exchange (false))
         {
-            auto fir = generate (sampleRate.load(), fftOrder.load());
+            const int order = fftOrder.load();
+            auto fir = generate (sampleRate.load(), order);
             {
                 const juce::SpinLock::ScopedLockType lock (firLock);
                 pendingFIR = std::make_unique<juce::AudioBuffer<float>> (std::move (fir));
             }
-            // Debounce — give the audio thread + JUCE convolution time to consume this IR
-            // and finish its internal partitioning before we possibly queue another one.
-            // Critical for large IRs (8192/16384 taps), where the convolution's preparation
-            // is slow enough that constant reloads otherwise leave it permanently un-prepared
-            // (resulting in silent output, i.e. "full mono" in M/S decode).
-            wait (150);
+
+            // HARD debounce that does NOT get cut short by notify() calls arriving during
+            // the cooldown. juce::Thread::wait(timeoutMs) returns early on notify(), which
+            // is exactly the wrong behaviour here: when the audio thread is dragging an
+            // auto-safety controller and generating a stream of width changes, every change
+            // wakes us up and we'd queue another IR before JUCE's convolution has finished
+            // preparing the previous one. For large IRs this leaves the convolution
+            // perpetually un-prepared and outputting zero.
+            //
+            // The debounce scales with FFT size because JUCE's internal partitioning is
+            // O(N log N) and gets slow above 2048 taps:
+            //     order  9 (   512):  120 ms
+            //     order 10 ( 1024):  240 ms
+            //     order 11 ( 2048):  480 ms
+            //     order 12 ( 4096):  960 ms
+            //     order 13 ( 8192): 1920 ms
+            //     order 14 (16384): 2400 ms (capped)
+            const int debounceMs = juce::jmin (2400, 120 << juce::jmax (0, order - 9));
+
+            const auto until = juce::Time::getMillisecondCounter() + (juce::uint32) debounceMs;
+            while (! threadShouldExit() && juce::Time::getMillisecondCounter() < until)
+                wait (60);
         }
         else
         {
